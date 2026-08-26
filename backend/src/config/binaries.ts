@@ -32,7 +32,21 @@ export function getYtDlpInfo(): BinaryInfo {
     return cachedYtDlp;
   }
 
-  // 2. Try direct 'yt-dlp' executable
+  // 2. Check local bin directory (backend/bin/yt-dlp or yt-dlp.exe)
+  const isWin = process.platform === 'win32';
+  const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+  const localBinPath = path.join(process.cwd(), 'bin', binName);
+  if (fs.existsSync(localBinPath)) {
+    try {
+      execFileSync(localBinPath, ['--version'], { stdio: 'ignore' });
+      cachedYtDlp = { command: localBinPath, argsPrefix: [] };
+      return cachedYtDlp;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Try direct 'yt-dlp' executable on PATH
   try {
     execFileSync('yt-dlp', ['--version'], { stdio: 'ignore' });
     cachedYtDlp = { command: 'yt-dlp', argsPrefix: [] };
@@ -41,8 +55,28 @@ export function getYtDlpInfo(): BinaryInfo {
     // ignore
   }
 
-  // 3. Try python -m yt_dlp
-  for (const py of ['python', 'python3']) {
+  // 4. Check common Linux / Render installation paths
+  const commonLinuxPaths = [
+    path.join(process.env.HOME || '/root', '.local/bin/yt-dlp'),
+    '/opt/render/.local/bin/yt-dlp',
+    '/usr/local/bin/yt-dlp',
+    '/usr/bin/yt-dlp',
+  ];
+
+  for (const linuxPath of commonLinuxPaths) {
+    if (fs.existsSync(linuxPath)) {
+      try {
+        execFileSync(linuxPath, ['--version'], { stdio: 'ignore' });
+        cachedYtDlp = { command: linuxPath, argsPrefix: [] };
+        return cachedYtDlp;
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // 5. Try python -m yt_dlp
+  for (const py of ['python3', 'python']) {
     try {
       execFileSync(py, ['-m', 'yt_dlp', '--version'], { stdio: 'ignore' });
       cachedYtDlp = { command: py, argsPrefix: ['-m', 'yt_dlp'] };
@@ -52,9 +86,54 @@ export function getYtDlpInfo(): BinaryInfo {
     }
   }
 
-  // Fallback to direct 'yt-dlp'
+  // 6. Auto-download binary fallback if missing
+  try {
+    const downloadedPath = downloadYtDlpSync(localBinPath);
+    if (downloadedPath && fs.existsSync(downloadedPath)) {
+      cachedYtDlp = { command: downloadedPath, argsPrefix: [] };
+      return cachedYtDlp;
+    }
+  } catch (downloadErr) {
+    console.error('Failed auto-downloading yt-dlp binary:', downloadErr);
+  }
+
+  // Final fallback to system command
   cachedYtDlp = { command: 'yt-dlp', argsPrefix: [] };
   return cachedYtDlp;
+}
+
+function downloadYtDlpSync(targetPath: string): string | null {
+  const binDir = path.dirname(targetPath);
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true });
+  }
+
+  const isWin = process.platform === 'win32';
+  const url = isWin
+    ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
+    : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+
+  try {
+    if (isWin) {
+      execFileSync('powershell', ['-Command', `Invoke-WebRequest -Uri '${url}' -OutFile '${targetPath}'`], { stdio: 'ignore' });
+    } else {
+      execFileSync('curl', ['-L', url, '-o', targetPath], { stdio: 'ignore' });
+      fs.chmodSync(targetPath, 0o755);
+    }
+    if (fs.existsSync(targetPath)) {
+      return targetPath;
+    }
+  } catch {
+    try {
+      execFileSync('wget', ['-O', targetPath, url], { stdio: 'ignore' });
+      if (!isWin) fs.chmodSync(targetPath, 0o755);
+      if (fs.existsSync(targetPath)) return targetPath;
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
 }
 
 export function getFfmpegPath(): string {
@@ -76,7 +155,7 @@ export function getFfmpegPath(): string {
   }
 
   // 3. Try obtaining imageio_ffmpeg path via Python
-  for (const py of ['python', 'python3']) {
+  for (const py of ['python3', 'python']) {
     try {
       const output = execFileSync(
         py,
