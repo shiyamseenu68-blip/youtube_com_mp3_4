@@ -107,10 +107,10 @@ export async function checkBinaryStatus(): Promise<BinaryStatus> {
     const args = [...ytInfo.argsPrefix, '--version'];
     const output = execFileSync(ytInfo.command, args, { encoding: 'utf-8', timeout: 5000 }).trim();
     ytAvailable = true;
-    ytVersion = output.split('\n')[0] || output;
+    ytVersion = output.split('\n')[0] || output || null;
   } catch (err: any) {
     ytAvailable = false;
-    ytVersion = err.message || 'Not found';
+    ytVersion = (err && typeof err.message === 'string' ? err.message : null);
   }
 
   let ffmpegAvailable = false;
@@ -119,10 +119,10 @@ export async function checkBinaryStatus(): Promise<BinaryStatus> {
     const output = execFileSync(ffmpegPath, ['-version'], { encoding: 'utf-8', timeout: 5000 }).trim();
     ffmpegAvailable = true;
     const match = output.match(/ffmpeg version ([^\s]+)/i);
-    ffmpegVersion = match ? match[1] : output.split('\n')[0];
+    ffmpegVersion = match && match[1] ? match[1] : (output.split('\n')[0] || null);
   } catch (err: any) {
     ffmpegAvailable = false;
-    ffmpegVersion = err.message || 'Not found';
+    ffmpegVersion = (err && typeof err.message === 'string' ? err.message : null);
   }
 
   return {
