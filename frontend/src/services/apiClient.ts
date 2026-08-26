@@ -1,7 +1,14 @@
 import axios from 'axios';
 import { AnalyzeResponse, HealthResponse, JobProgressData } from '../types/api';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (!envUrl) return '/api';
+  const cleanUrl = envUrl.replace(/\/+$/, '');
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+}
+
+const API_BASE = getApiBaseUrl();
 
 export const apiClient = {
   async getHealth(): Promise<HealthResponse> {
