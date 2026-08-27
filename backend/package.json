@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc",
+    "postinstall": "python3 -m pip install --upgrade yt-dlp || pip3 install --upgrade yt-dlp || pip install --upgrade yt-dlp || true",
+    "build": "python3 -m pip install --upgrade yt-dlp || pip3 install --upgrade yt-dlp || pip install --upgrade yt-dlp || true; tsc",
     "start": "node dist/server.js"
   },
   "keywords": [
