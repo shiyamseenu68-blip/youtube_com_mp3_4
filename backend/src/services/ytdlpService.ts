@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { getYtDlpInfo, getFfmpegPath } from '../config/binaries';
 import { SupportedPlatform } from '../utils/urlValidator';
+import { createTempCookieFile } from '../utils/cookieHelper';
 
 export interface MediaMetadata {
   platform: SupportedPlatform;
@@ -42,6 +43,7 @@ export class YtDlpService {
   public async analyzeUrl(url: string, platform: SupportedPlatform): Promise<MediaMetadata> {
     const ytInfo = getYtDlpInfo();
     const env = this.getExecEnv();
+    const cookieHandle = createTempCookieFile();
 
     const args = [
       ...ytInfo.argsPrefix,
@@ -51,8 +53,13 @@ export class YtDlpService {
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', `node:${process.execPath}`,
-      url,
     ];
+
+    if (cookieHandle.filePath) {
+      args.push('--cookies', cookieHandle.filePath);
+    }
+
+    args.push(url);
 
     return new Promise((resolve, reject) => {
       execFile(
@@ -60,36 +67,39 @@ export class YtDlpService {
         args,
         { maxBuffer: 10 * 1024 * 1024, timeout: 30000, env },
         (error, stdout, stderr) => {
-          if (error) {
-            const errStr = (stderr || error.message || '').toString();
-            reject(this.parseYtDlpError(errStr, platform));
-            return;
-          }
-
           try {
-            const json = JSON.parse(stdout);
+            if (error) {
+              const errStr = (stderr || error.message || '').toString();
+              reject(this.parseYtDlpError(errStr, platform));
+              return;
+            }
 
-            const title = json.title || json.description || (platform === 'instagram' ? 'Instagram Media' : 'YouTube Video');
-            const thumbnail = json.thumbnail || (json.thumbnails && json.thumbnails.length ? json.thumbnails[json.thumbnails.length - 1].url : '');
-            const duration = Math.round(json.duration || 0);
+            try {
+              const json = JSON.parse(stdout);
 
-            // Extract best quality options
-            const availableFormats = [
-              { formatId: 'mp4_best', ext: 'mp4', resolution: 'Best Quality Video (MP4)' },
-              { formatId: 'mp3_best', ext: 'mp3', resolution: 'High Quality Audio (MP3)' }
-            ];
+              const title = json.title || json.description || (platform === 'instagram' ? 'Instagram Media' : 'YouTube Video');
+              const thumbnail = json.thumbnail || (json.thumbnails && json.thumbnails.length ? json.thumbnails[json.thumbnails.length - 1].url : '');
+              const duration = Math.round(json.duration || 0);
 
-            resolve({
-              platform,
-              title,
-              thumbnail,
-              duration,
-              uploader: json.uploader || json.channel || json.uploader_id,
-              viewCount: json.view_count,
-              availableFormats,
-            });
-          } catch (parseErr) {
-            reject(new Error('Failed to parse media metadata from extractor output.'));
+              const availableFormats = [
+                { formatId: 'mp4_best', ext: 'mp4', resolution: 'Best Quality Video (MP4)' },
+                { formatId: 'mp3_best', ext: 'mp3', resolution: 'High Quality Audio (MP3)' }
+              ];
+
+              resolve({
+                platform,
+                title,
+                thumbnail,
+                duration,
+                uploader: json.uploader || json.channel || json.uploader_id,
+                viewCount: json.view_count,
+                availableFormats,
+              });
+            } catch (parseErr) {
+              reject(new Error('Failed to parse media metadata from extractor output.'));
+            }
+          } finally {
+            cookieHandle.cleanup();
           }
         }
       );
@@ -110,6 +120,7 @@ export class YtDlpService {
       const ytInfo = getYtDlpInfo();
       const ffmpegPath = getFfmpegPath();
       const env = this.getExecEnv();
+      const cookieHandle = createTempCookieFile();
 
       const outputTemplate = `${outputFilenameWithoutExt}.%(ext)s`;
 
@@ -123,19 +134,22 @@ export class YtDlpService {
         '-o', outputTemplate,
       ];
 
+      if (cookieHandle.filePath) {
+        args.push('--cookies', cookieHandle.filePath);
+      }
+
       if (ffmpegPath && ffmpegPath !== 'ffmpeg') {
         args.push('--ffmpeg-location', ffmpegPath);
       }
 
       if (format === 'mp3') {
         args.push(
-          '-x', // extract audio
+          '-x',
           '--audio-format', 'mp3',
-          '--audio-quality', '0', // best VBR quality
+          '--audio-quality', '0',
           '--no-keep-video'
         );
       } else {
-        // MP4 format download
         args.push(
           '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
           '--merge-output-format', 'mp4'
@@ -158,37 +172,40 @@ export class YtDlpService {
       });
 
       child.on('error', (err) => {
+        cookieHandle.cleanup();
         reject(new Error(`Download process error: ${err.message}`));
       });
 
       child.on('close', (code) => {
-        if (code !== 0) {
-          reject(this.parseYtDlpError(stderrBuffer, 'youtube'));
-          return;
-        }
-
-        // Find created output file
-        const expectedExt = format === 'mp3' ? '.mp3' : '.mp4';
-        const expectedFile = path.join(outputDir, `${outputFilenameWithoutExt}${expectedExt}`);
-
-        if (fs.existsSync(expectedFile)) {
-          resolve(expectedFile);
-          return;
-        }
-
-        // Fallback: search directory for any file starting with outputFilenameWithoutExt
         try {
-          const files = fs.readdirSync(outputDir);
-          const matched = files.find(f => f.startsWith(outputFilenameWithoutExt) && (f.endsWith('.mp3') || f.endsWith('.mp4')));
-          if (matched) {
-            resolve(path.join(outputDir, matched));
+          if (code !== 0) {
+            reject(this.parseYtDlpError(stderrBuffer, 'youtube'));
             return;
           }
-        } catch {
-          // ignore
-        }
 
-        reject(new Error(`Extraction finished but output file was not found in directory.`));
+          const expectedExt = format === 'mp3' ? '.mp3' : '.mp4';
+          const expectedFile = path.join(outputDir, `${outputFilenameWithoutExt}${expectedExt}`);
+
+          if (fs.existsSync(expectedFile)) {
+            resolve(expectedFile);
+            return;
+          }
+
+          try {
+            const files = fs.readdirSync(outputDir);
+            const matched = files.find(f => f.startsWith(outputFilenameWithoutExt) && (f.endsWith('.mp3') || f.endsWith('.mp4')));
+            if (matched) {
+              resolve(path.join(outputDir, matched));
+              return;
+            }
+          } catch {
+            // ignore
+          }
+
+          reject(new Error(`Extraction finished but output file was not found in directory.`));
+        } finally {
+          cookieHandle.cleanup();
+        }
       });
     });
   }
@@ -208,7 +225,6 @@ export class YtDlpService {
         continue;
       }
       if (line.includes('[download]')) {
-        // e.g. [download]  45.2% of 12.34MiB at  2.15MiB/s ETA 00:04
         const percentMatch = line.match(/(\d+\.\d+)%/);
         const speedMatch = line.match(/at\s+([\d\.]+\s*[kMG]i?B\/s)/i);
         const etaMatch = line.match(/ETA\s+([\d:]+)/i);

@@ -1,6 +1,7 @@
 import { execFile, execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { isYouTubeCookiesConfigured } from '../utils/cookieHelper';
 
 export interface BinaryInfo {
   command: string;
@@ -12,6 +13,7 @@ export interface BinaryStatus {
     available: boolean;
     version: string | null;
     path: string;
+    cookiesConfigured: boolean;
   };
   ffmpeg: {
     available: boolean;
@@ -141,11 +143,15 @@ export async function checkBinaryStatus(): Promise<BinaryStatus> {
     ffmpegVersion = (err && typeof err.message === 'string' ? err.message : null);
   }
 
+  const cookiesConfigured = isYouTubeCookiesConfigured();
+  console.log(`YouTube cookies configured: ${cookiesConfigured}`);
+
   return {
     ytDlp: {
       available: ytAvailable,
       version: ytVersion,
       path: ytInfo.argsPrefix.length ? `${ytInfo.command} ${ytInfo.argsPrefix.join(' ')}` : ytInfo.command,
+      cookiesConfigured,
     },
     ffmpeg: {
       available: ffmpegAvailable,
