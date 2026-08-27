@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { getYtDlpInfo, getFfmpegPath } from '../config/binaries';
 import { SupportedPlatform } from '../utils/urlValidator';
-import { createTempCookieFile } from '../utils/cookieHelper';
+import { createTempCookieFile, getYouTubePoToken } from '../utils/cookieHelper';
 
 export interface MediaMetadata {
   platform: SupportedPlatform;
@@ -38,12 +38,24 @@ export class YtDlpService {
   }
 
   /**
+   * Sanitizes diagnostic error output to guarantee secrets, cookies, or tokens are never logged
+   */
+  private sanitizeErrorOutput(rawStr: string): string {
+    if (!rawStr) return '';
+    return rawStr
+      .replace(/(session_id|VISITOR_INFO1_LIVE|HSID|SSID|APISID|SAPISID|LOGIN_INFO)=[^;\s]+/gi, '$1=[REDACTED]')
+      .replace(/(Bearer|Token)\s+[A-Za-z0-9\-\._~\+\/]+=*/gi, '$1 [REDACTED]')
+      .replace(/po_token=[^\s&"]+/gi, 'po_token=[REDACTED]');
+  }
+
+  /**
    * Analyze media URL using yt-dlp -J
    */
   public async analyzeUrl(url: string, platform: SupportedPlatform): Promise<MediaMetadata> {
     const ytInfo = getYtDlpInfo();
     const env = this.getExecEnv();
     const cookieHandle = createTempCookieFile();
+    const poToken = getYouTubePoToken();
 
     const args = [
       ...ytInfo.argsPrefix,
@@ -59,7 +71,24 @@ export class YtDlpService {
       args.push('--cookies', cookieHandle.filePath);
     }
 
+    if (poToken && platform === 'youtube') {
+      args.push('--extractor-args', `youtube:po_token=web.gvs+${poToken}`);
+    }
+
     args.push(url);
+
+    // Safe sanitized diagnostic logging
+    const safeArgs = args.map(a => {
+      if (a.includes('yt_cookies_')) return '--cookies <temp-cookie-file>';
+      if (a.includes('po_token=')) return 'youtube:po_token=[REDACTED]';
+      return a;
+    });
+
+    console.log(`[yt-dlp Diagnostic] Engine Command: ${ytInfo.command} ${ytInfo.argsPrefix.join(' ')}`);
+    console.log(`[yt-dlp Diagnostic] Node Executable: ${process.execPath}`);
+    console.log(`[yt-dlp Diagnostic] Cookies Configured: ${cookieHandle.filePath ? true : false} (Valid Rows: ${cookieHandle.rowCount})`);
+    console.log(`[yt-dlp Diagnostic] PO Token Configured: ${poToken ? true : false}`);
+    console.log(`[yt-dlp Diagnostic] Arguments:`, safeArgs);
 
     return new Promise((resolve, reject) => {
       execFile(
@@ -69,8 +98,11 @@ export class YtDlpService {
         (error, stdout, stderr) => {
           try {
             if (error) {
-              const errStr = (stderr || error.message || '').toString();
-              reject(this.parseYtDlpError(errStr, platform));
+              const rawErrStr = (stderr || error.message || '').toString();
+              const sanitizedErr = this.sanitizeErrorOutput(rawErrStr);
+              console.error(`[yt-dlp Error] Exit Code: ${(error as any).code || 1}`);
+              console.error(`[yt-dlp Raw Stderr]:\n${sanitizedErr}`);
+              reject(this.parseYtDlpError(sanitizedErr, platform));
               return;
             }
 
@@ -121,6 +153,7 @@ export class YtDlpService {
       const ffmpegPath = getFfmpegPath();
       const env = this.getExecEnv();
       const cookieHandle = createTempCookieFile();
+      const poToken = getYouTubePoToken();
 
       const outputTemplate = `${outputFilenameWithoutExt}.%(ext)s`;
 
@@ -136,6 +169,10 @@ export class YtDlpService {
 
       if (cookieHandle.filePath) {
         args.push('--cookies', cookieHandle.filePath);
+      }
+
+      if (poToken) {
+        args.push('--extractor-args', `youtube:po_token=web.gvs+${poToken}`);
       }
 
       if (ffmpegPath && ffmpegPath !== 'ffmpeg') {
@@ -179,7 +216,10 @@ export class YtDlpService {
       child.on('close', (code) => {
         try {
           if (code !== 0) {
-            reject(this.parseYtDlpError(stderrBuffer, 'youtube'));
+            const sanitizedErr = this.sanitizeErrorOutput(stderrBuffer);
+            console.error(`[yt-dlp Download Error] Exit Code: ${code}`);
+            console.error(`[yt-dlp Download Stderr]:\n${sanitizedErr}`);
+            reject(this.parseYtDlpError(sanitizedErr, 'youtube'));
             return;
           }
 
