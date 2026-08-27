@@ -32,14 +32,11 @@ export function getYtDlpInfo(): BinaryInfo {
     return cachedYtDlp;
   }
 
-  // 2. Check local bin directory (backend/bin/yt-dlp or yt-dlp.exe)
-  const isWin = process.platform === 'win32';
-  const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
-  const localBinPath = path.join(process.cwd(), 'bin', binName);
-  if (fs.existsSync(localBinPath)) {
+  // 2. Try native python3 / python module FIRST (avoids PyInstaller subprocess environment isolation)
+  for (const py of ['python3', 'python']) {
     try {
-      execFileSync(localBinPath, ['--version'], { stdio: 'ignore' });
-      cachedYtDlp = { command: localBinPath, argsPrefix: [] };
+      execFileSync(py, ['-m', 'yt_dlp', '--version'], { stdio: 'ignore' });
+      cachedYtDlp = { command: py, argsPrefix: ['-m', 'yt_dlp'] };
       return cachedYtDlp;
     } catch {
       // ignore
@@ -75,11 +72,14 @@ export function getYtDlpInfo(): BinaryInfo {
     }
   }
 
-  // 5. Try python -m yt_dlp
-  for (const py of ['python3', 'python']) {
+  // 5. Check local bin directory (backend/bin/yt-dlp or yt-dlp.exe)
+  const isWin = process.platform === 'win32';
+  const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+  const localBinPath = path.join(process.cwd(), 'bin', binName);
+  if (fs.existsSync(localBinPath)) {
     try {
-      execFileSync(py, ['-m', 'yt_dlp', '--version'], { stdio: 'ignore' });
-      cachedYtDlp = { command: py, argsPrefix: ['-m', 'yt_dlp'] };
+      execFileSync(localBinPath, ['--version'], { stdio: 'ignore' });
+      cachedYtDlp = { command: localBinPath, argsPrefix: [] };
       return cachedYtDlp;
     } catch {
       // ignore
