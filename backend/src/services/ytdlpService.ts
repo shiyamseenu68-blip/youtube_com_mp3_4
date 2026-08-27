@@ -25,6 +25,8 @@ export class YtDlpService {
    */
   public async analyzeUrl(url: string, platform: SupportedPlatform): Promise<MediaMetadata> {
     const ytInfo = getYtDlpInfo();
+    const nodeBinDir = path.dirname(process.execPath);
+
     const args = [
       ...ytInfo.argsPrefix,
       '--dump-single-json',
@@ -32,7 +34,7 @@ export class YtDlpService {
       '--no-playlist',
       '--geo-bypass',
       '--no-check-certificates',
-      '--js-runtimes', 'node',
+      '--js-runtimes', `node:${nodeBinDir}`,
       url,
     ];
 
@@ -40,7 +42,7 @@ export class YtDlpService {
       execFile(
         ytInfo.command,
         args,
-        { maxBuffer: 10 * 1024 * 1024, timeout: 30000 },
+        { maxBuffer: 10 * 1024 * 1024, timeout: 30000, env: process.env },
         (error, stdout, stderr) => {
           if (error) {
             const errStr = (stderr || error.message || '').toString();
@@ -91,6 +93,7 @@ export class YtDlpService {
     return new Promise((resolve, reject) => {
       const ytInfo = getYtDlpInfo();
       const ffmpegPath = getFfmpegPath();
+      const nodeBinDir = path.dirname(process.execPath);
 
       const outputTemplate = `${outputFilenameWithoutExt}.%(ext)s`;
 
@@ -100,7 +103,7 @@ export class YtDlpService {
         '--no-playlist',
         '--geo-bypass',
         '--newline',
-        '--js-runtimes', 'node',
+        '--js-runtimes', `node:${nodeBinDir}`,
         '-o', outputTemplate,
       ];
 
@@ -125,7 +128,7 @@ export class YtDlpService {
 
       args.push(url);
 
-      const child = spawn(ytInfo.command, args, { cwd: outputDir });
+      const child = spawn(ytInfo.command, args, { cwd: outputDir, env: process.env });
 
       let stderrBuffer = '';
 
