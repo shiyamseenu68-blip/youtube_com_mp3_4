@@ -26,13 +26,29 @@ let cachedFfmpeg: string | null = null;
 export function getYtDlpInfo(): BinaryInfo {
   if (cachedYtDlp) return cachedYtDlp;
 
-  // 1. Check custom path if provided in ENV (only if explicit custom binary is specified)
+  // 1. Check custom path if provided in ENV
   if (process.env.YTDLP_PATH && fs.existsSync(process.env.YTDLP_PATH)) {
     cachedYtDlp = { command: process.env.YTDLP_PATH, argsPrefix: [] };
     return cachedYtDlp;
   }
 
-  // 2. Try native python3 / python module FIRST
+  // 2. Check project-local virtual environment (.venv) FIRST
+  const isWin = process.platform === 'win32';
+  const venvPython = isWin
+    ? path.join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+    : path.join(process.cwd(), '.venv', 'bin', 'python');
+
+  if (fs.existsSync(venvPython)) {
+    try {
+      execFileSync(venvPython, ['-m', 'yt_dlp', '--version'], { stdio: 'ignore' });
+      cachedYtDlp = { command: venvPython, argsPrefix: ['-m', 'yt_dlp'] };
+      return cachedYtDlp;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Fallback to system python module
   for (const py of ['python3', 'python']) {
     try {
       execFileSync(py, ['-m', 'yt_dlp', '--version'], { stdio: 'ignore' });
@@ -43,19 +59,7 @@ export function getYtDlpInfo(): BinaryInfo {
     }
   }
 
-  // 3. Attempt dynamic pip installation of yt-dlp python package if python is available
-  for (const py of ['python3', 'python']) {
-    try {
-      execFileSync(py, ['-m', 'pip', 'install', '--upgrade', 'yt-dlp'], { stdio: 'ignore', timeout: 30000 });
-      execFileSync(py, ['-m', 'yt_dlp', '--version'], { stdio: 'ignore' });
-      cachedYtDlp = { command: py, argsPrefix: ['-m', 'yt_dlp'] };
-      return cachedYtDlp;
-    } catch {
-      // ignore
-    }
-  }
-
-  // 4. Try direct 'yt-dlp' executable on PATH
+  // 4. Fallback to system 'yt-dlp' executable on PATH
   try {
     execFileSync('yt-dlp', ['--version'], { stdio: 'ignore' });
     cachedYtDlp = { command: 'yt-dlp', argsPrefix: [] };
@@ -64,28 +68,8 @@ export function getYtDlpInfo(): BinaryInfo {
     // ignore
   }
 
-  // 5. Check common Linux / Render installation paths
-  const commonLinuxPaths = [
-    path.join(process.env.HOME || '/root', '.local/bin/yt-dlp'),
-    '/opt/render/.local/bin/yt-dlp',
-    '/usr/local/bin/yt-dlp',
-    '/usr/bin/yt-dlp',
-  ];
-
-  for (const linuxPath of commonLinuxPaths) {
-    if (fs.existsSync(linuxPath)) {
-      try {
-        execFileSync(linuxPath, ['--version'], { stdio: 'ignore' });
-        cachedYtDlp = { command: linuxPath, argsPrefix: [] };
-        return cachedYtDlp;
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  // 6. Final fallback to system command
-  cachedYtDlp = { command: 'python3', argsPrefix: ['-m', 'yt_dlp'] };
+  // 5. Final fallback to venv Python command
+  cachedYtDlp = { command: venvPython, argsPrefix: ['-m', 'yt_dlp'] };
   return cachedYtDlp;
 }
 
