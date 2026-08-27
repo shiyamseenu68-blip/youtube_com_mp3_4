@@ -33,7 +33,6 @@ export class YtDlpService {
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', 'node',
-      '--extractor-args', 'youtube:player_client=mweb,web',
       url,
     ];
 
@@ -102,7 +101,6 @@ export class YtDlpService {
         '--geo-bypass',
         '--newline',
         '--js-runtimes', 'node',
-        '--extractor-args', 'youtube:player_client=mweb,web',
         '-o', outputTemplate,
       ];
 
