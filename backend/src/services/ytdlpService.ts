@@ -73,6 +73,8 @@ export class YtDlpService {
 
     if (poToken && platform === 'youtube') {
       args.push('--extractor-args', `youtube:po_token=web.gvs+${poToken}`);
+    } else if (platform === 'youtube') {
+      args.push('--extractor-args', 'youtube:player_client=android,web');
     }
 
     args.push(url);
@@ -173,6 +175,8 @@ export class YtDlpService {
 
       if (poToken) {
         args.push('--extractor-args', `youtube:po_token=web.gvs+${poToken}`);
+      } else {
+        args.push('--extractor-args', 'youtube:player_client=android,web');
       }
 
       if (ffmpegPath && ffmpegPath !== 'ffmpeg') {
