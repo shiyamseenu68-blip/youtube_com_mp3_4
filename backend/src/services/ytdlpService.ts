@@ -32,6 +32,8 @@ export class YtDlpService {
       '--no-playlist',
       '--geo-bypass',
       '--no-check-certificates',
+      '--js-runtimes', 'node',
+      '--extractor-args', 'youtube:player_client=mweb,web',
       url,
     ];
 
@@ -99,6 +101,8 @@ export class YtDlpService {
         '--no-playlist',
         '--geo-bypass',
         '--newline',
+        '--js-runtimes', 'node',
+        '--extractor-args', 'youtube:player_client=mweb,web',
         '--ffmpeg-location', ffmpegPath,
         '-o', outputTemplate,
       ];
