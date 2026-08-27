@@ -103,9 +103,12 @@ export class YtDlpService {
         '--newline',
         '--js-runtimes', 'node',
         '--extractor-args', 'youtube:player_client=mweb,web',
-        '--ffmpeg-location', ffmpegPath,
         '-o', outputTemplate,
       ];
+
+      if (ffmpegPath && ffmpegPath !== 'ffmpeg') {
+        args.push('--ffmpeg-location', ffmpegPath);
+      }
 
       if (format === 'mp3') {
         args.push(
