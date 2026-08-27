@@ -21,10 +21,27 @@ export interface MediaMetadata {
 
 export class YtDlpService {
   /**
+   * Helper to ensure Node.js binary directory is in PATH for child processes
+   */
+  private getExecEnv(): NodeJS.ProcessEnv {
+    const nodeBinDir = path.dirname(process.execPath);
+    const currentPath = process.env.PATH || '';
+    const newPath = currentPath.includes(nodeBinDir)
+      ? currentPath
+      : `${nodeBinDir}${path.delimiter}${currentPath}`;
+
+    return {
+      ...process.env,
+      PATH: newPath,
+    };
+  }
+
+  /**
    * Analyze media URL using yt-dlp -J
    */
   public async analyzeUrl(url: string, platform: SupportedPlatform): Promise<MediaMetadata> {
     const ytInfo = getYtDlpInfo();
+    const env = this.getExecEnv();
 
     const args = [
       ...ytInfo.argsPrefix,
@@ -41,7 +58,7 @@ export class YtDlpService {
       execFile(
         ytInfo.command,
         args,
-        { maxBuffer: 10 * 1024 * 1024, timeout: 30000, env: process.env },
+        { maxBuffer: 10 * 1024 * 1024, timeout: 30000, env },
         (error, stdout, stderr) => {
           if (error) {
             const errStr = (stderr || error.message || '').toString();
@@ -92,6 +109,7 @@ export class YtDlpService {
     return new Promise((resolve, reject) => {
       const ytInfo = getYtDlpInfo();
       const ffmpegPath = getFfmpegPath();
+      const env = this.getExecEnv();
 
       const outputTemplate = `${outputFilenameWithoutExt}.%(ext)s`;
 
@@ -126,7 +144,7 @@ export class YtDlpService {
 
       args.push(url);
 
-      const child = spawn(ytInfo.command, args, { cwd: outputDir, env: process.env });
+      const child = spawn(ytInfo.command, args, { cwd: outputDir, env });
 
       let stderrBuffer = '';
 
