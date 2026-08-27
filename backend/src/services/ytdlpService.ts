@@ -25,7 +25,6 @@ export class YtDlpService {
    */
   public async analyzeUrl(url: string, platform: SupportedPlatform): Promise<MediaMetadata> {
     const ytInfo = getYtDlpInfo();
-    const nodeBinDir = path.dirname(process.execPath);
 
     const args = [
       ...ytInfo.argsPrefix,
@@ -34,7 +33,7 @@ export class YtDlpService {
       '--no-playlist',
       '--geo-bypass',
       '--no-check-certificates',
-      '--js-runtimes', `node:${nodeBinDir}`,
+      '--js-runtimes', `node:${process.execPath}`,
       url,
     ];
 
@@ -93,7 +92,6 @@ export class YtDlpService {
     return new Promise((resolve, reject) => {
       const ytInfo = getYtDlpInfo();
       const ffmpegPath = getFfmpegPath();
-      const nodeBinDir = path.dirname(process.execPath);
 
       const outputTemplate = `${outputFilenameWithoutExt}.%(ext)s`;
 
@@ -103,7 +101,7 @@ export class YtDlpService {
         '--no-playlist',
         '--geo-bypass',
         '--newline',
-        '--js-runtimes', `node:${nodeBinDir}`,
+        '--js-runtimes', `node:${process.execPath}`,
         '-o', outputTemplate,
       ];
 
