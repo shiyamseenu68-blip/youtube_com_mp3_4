@@ -91,7 +91,7 @@ export class YtDlpService {
       const ytInfo = getYtDlpInfo();
       const ffmpegPath = getFfmpegPath();
 
-      const outputTemplate = path.join(outputDir, `${outputFilenameWithoutExt}.%(ext)s`);
+      const outputTemplate = `${outputFilenameWithoutExt}.%(ext)s`;
 
       const args = [
         ...ytInfo.argsPrefix,
@@ -108,7 +108,6 @@ export class YtDlpService {
           '-x', // extract audio
           '--audio-format', 'mp3',
           '--audio-quality', '0', // best VBR quality
-          '--embed-thumbnail',
           '--no-keep-video'
         );
       } else {
