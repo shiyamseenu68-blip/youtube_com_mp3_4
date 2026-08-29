@@ -6,6 +6,7 @@ import { validateAndDetectUrl } from '../utils/urlValidator';
 import { ytdlpService } from '../services/ytdlpService';
 import { instagramService } from '../services/instagramService';
 import { downloadService } from '../services/downloadService';
+import { inspectCookiesDetailed } from '../utils/cookieHelper';
 
 const router = Router();
 
@@ -16,11 +17,13 @@ const router = Router();
 router.get('/health', async (req: Request, res: Response) => {
   try {
     const status = await checkBinaryStatus();
+    const cookieInspection = inspectCookiesDetailed();
     res.json({
       status: 'ok',
       environment: config.nodeEnv,
       ytDlp: status.ytDlp,
       ffmpeg: status.ffmpeg,
+      cookieInspection,
     });
   } catch (err: any) {
     res.status(500).json({

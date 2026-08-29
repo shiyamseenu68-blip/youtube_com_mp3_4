@@ -9,6 +9,88 @@ export interface CookieFileHandle {
   cleanup: () => void;
 }
 
+export interface CookieNameAudit {
+  name: string;
+  status: 'PRESENT' | 'ABSENT' | 'EXPIRED';
+}
+
+export interface CookieInspectionResult {
+  totalValidRows: number;
+  expiredRows: number;
+  nonExpiredRows: number;
+  domains: string[];
+  cookieAudits: CookieNameAudit[];
+}
+
+/**
+ * Safely inspects Netscape cookie text and returns non-sensitive structural diagnostics
+ */
+export function inspectCookiesDetailed(): CookieInspectionResult | null {
+  const cookieText = process.env.YOUTUBE_COOKIES_TEXT;
+  if (!cookieText || !cookieText.trim()) return null;
+
+  const lines = cookieText.split('\n');
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const domains = new Set<string>();
+  const cookieStatusMap = new Map<string, 'PRESENT' | 'EXPIRED'>();
+
+  let totalValidRows = 0;
+  let expiredRows = 0;
+  let nonExpiredRows = 0;
+
+  const targetNames = [
+    'LOGIN_INFO',
+    'SID',
+    'HSID',
+    'SSID',
+    'SAPISID',
+    '__Secure-1PSID',
+    '__Secure-3PSID',
+    'VISITOR_INFO1_LIVE',
+    'PREF'
+  ];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const parts = line.split('\t');
+    if (parts.length >= 7) {
+      totalValidRows++;
+      const domain = parts[0];
+      const expiry = parseInt(parts[4], 10);
+      const name = parts[5];
+
+      domains.add(domain);
+
+      const isExpired = !isNaN(expiry) && expiry > 0 && expiry < nowSec;
+      if (isExpired) {
+        expiredRows++;
+        if (!cookieStatusMap.has(name)) {
+          cookieStatusMap.set(name, 'EXPIRED');
+        }
+      } else {
+        nonExpiredRows++;
+        cookieStatusMap.set(name, 'PRESENT');
+      }
+    }
+  }
+
+  const cookieAudits: CookieNameAudit[] = targetNames.map(name => {
+    const status = cookieStatusMap.get(name) || 'ABSENT';
+    return { name, status };
+  });
+
+  return {
+    totalValidRows,
+    expiredRows,
+    nonExpiredRows,
+    domains: Array.from(domains),
+    cookieAudits
+  };
+}
+
 /**
  * Counts non-comment, non-empty cookie rows in Netscape cookie text
  */
