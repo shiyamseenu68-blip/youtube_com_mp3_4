@@ -73,8 +73,6 @@ export class YtDlpService {
 
     if (poToken && platform === 'youtube') {
       args.push('--extractor-args', `youtube:po_token=web.gvs+${poToken}`);
-    } else if (platform === 'youtube') {
-      args.push('--extractor-args', 'youtube:player_client=android,web');
     }
 
     args.push(url);
@@ -130,6 +128,8 @@ export class YtDlpService {
                 availableFormats,
               });
             } catch (parseErr) {
+              const sanitizedStdout = this.sanitizeErrorOutput((stdout || '').toString());
+              console.error(`[yt-dlp JSON Parse Error] Raw Stdout snippet:\n${sanitizedStdout.slice(0, 500)}`);
               reject(new Error('Failed to parse media metadata from extractor output.'));
             }
           } finally {
@@ -175,8 +175,6 @@ export class YtDlpService {
 
       if (poToken) {
         args.push('--extractor-args', `youtube:po_token=web.gvs+${poToken}`);
-      } else {
-        args.push('--extractor-args', 'youtube:player_client=android,web');
       }
 
       if (ffmpegPath && ffmpegPath !== 'ffmpeg') {
